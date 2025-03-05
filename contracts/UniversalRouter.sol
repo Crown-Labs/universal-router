@@ -6,7 +6,7 @@ import {Dispatcher} from './base/Dispatcher.sol';
 import {RouterParameters} from './types/RouterParameters.sol';
 import {PaymentsImmutables, PaymentsParameters} from './modules/PaymentsImmutables.sol';
 import {UniswapImmutables, UniswapParameters} from './modules/uniswap/UniswapImmutables.sol';
-import {V4SwapRouter} from './modules/uniswap/v4/V4SwapRouter.sol';
+import {V4SwapKittycornRouter} from './modules/uniswap/v4/V4SwapKittycornRouter.sol';
 import {Commands} from './libraries/Commands.sol';
 import {IUniversalRouter} from './interfaces/IUniversalRouter.sol';
 import {MigratorImmutables, MigratorParameters} from './modules/MigratorImmutables.sol';
@@ -16,7 +16,7 @@ contract UniversalRouter is IUniversalRouter, Dispatcher {
         UniswapImmutables(
             UniswapParameters(params.v2Factory, params.v3Factory, params.pairInitCodeHash, params.poolInitCodeHash)
         )
-        V4SwapRouter(params.v4PoolManager)
+        V4SwapKittycornRouter(params.v4PoolManager, params.kittycornBank)
         PaymentsImmutables(PaymentsParameters(params.permit2, params.weth9))
         MigratorImmutables(MigratorParameters(params.v3NFTPositionManager, params.v4PositionManager))
     {}
@@ -32,11 +32,11 @@ contract UniversalRouter is IUniversalRouter, Dispatcher {
     }
 
     /// @inheritdoc IUniversalRouter
-    function execute(bytes calldata commands, bytes[] calldata inputs, uint256 deadline)
-        external
-        payable
-        checkDeadline(deadline)
-    {
+    function execute(
+        bytes calldata commands,
+        bytes[] calldata inputs,
+        uint256 deadline
+    ) external payable checkDeadline(deadline) {
         execute(commands, inputs);
     }
 

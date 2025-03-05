@@ -14,4 +14,6 @@ struct RouterParameters {
     // Uniswap v3->v4 migration parameters
     address v3NFTPositionManager;
     address v4PositionManager;
+    // Kittycorn parameters
+    address kittycornBank;
 }

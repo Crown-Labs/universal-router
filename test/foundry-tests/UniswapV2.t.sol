@@ -36,7 +36,8 @@ abstract contract UniswapV2Test is Test {
             poolInitCodeHash: bytes32(0),
             v4PoolManager: address(0),
             v3NFTPositionManager: address(0),
-            v4PositionManager: address(0)
+            v4PositionManager: address(0),
+            kittycornBank: address(0)
         });
         router = new UniversalRouter(params);
 
@@ -163,6 +164,7 @@ abstract contract UniswapV2Test is Test {
     }
 
     function token0() internal virtual returns (address);
+
     function token1() internal virtual returns (address);
 
     function setUpTokens() internal virtual {}

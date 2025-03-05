@@ -15,7 +15,7 @@ import {IERC165} from '@openzeppelin/contracts/utils/introspection/IERC165.sol';
 
 contract UniversalRouterTest is Test {
     address constant RECIPIENT = address(1234);
-    uint256 constant AMOUNT = 10 ** 18;
+    uint256 constant AMOUNT = 10**18;
 
     UniversalRouter router;
     ExampleModule testModule;
@@ -31,7 +31,8 @@ contract UniversalRouterTest is Test {
             poolInitCodeHash: bytes32(0),
             v4PoolManager: address(0),
             v3NFTPositionManager: address(0),
-            v4PositionManager: address(0)
+            v4PositionManager: address(0),
+            kittycornBank: address(0)
         });
         router = new UniversalRouter(params);
         testModule = new ExampleModule();
