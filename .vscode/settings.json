@@ -7,6 +7,7 @@
     "@uniswap/v2-core/=node_modules/@uniswap/v2-core/",
     "@uniswap/v3-periphery/=lib/v3-periphery/",
     "@uniswap/v4-periphery/=lib/kittycorn-contracts/lib/v4-periphery/",
-    "@kittycorn/=lib/kittycorn-contracts/"
+    "@kittycorn/=lib/kittycorn-contracts/",
+    "aave-v3/=lib/kittycorn-contracts/lib/aave-v3/src/"
   ]
 }

@@ -6,3 +6,4 @@ forge-std/=lib/forge-std/src/
 @uniswap/v3-periphery/=lib/v3-periphery/
 @uniswap/v4-periphery/=lib/kittycorn-contracts/lib/v4-periphery/
 @kittycorn/=lib/kittycorn-contracts/
+aave-v3/=lib/kittycorn-contracts/lib/aave-v3/src/

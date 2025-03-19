@@ -20,10 +20,6 @@ abstract contract V4SwapKittycornRouter is V4Router, Permit2Payments {
         bank = IKittycornBank(_bank);
     }
 
-    // function _pay(Currency token, address payer, uint256 amount) internal override {
-    //     payOrPermit2Transfer(Currency.unwrap(token), payer, address(poolManager), amount);
-    // }
-
     // implementation of abstract function DeltaResolver._pay
     function _pay(
         Currency token,
@@ -37,7 +33,7 @@ abstract contract V4SwapKittycornRouter is V4Router, Permit2Payments {
             if (payer == address(this)) {
                 ERC20(ulToken).safeTransfer(address(bank), amount);
             } else {
-                ERC20(ulToken).safeTransferFrom(payer, address(bank), amount);
+                PERMIT2.transferFrom(payer, address(bank), uint160(amount), ulToken);
             }
 
             // Deposit underlying token to tokenize
@@ -52,7 +48,7 @@ abstract contract V4SwapKittycornRouter is V4Router, Permit2Payments {
         if (payer == address(this)) {
             token.transfer(address(poolManager), amount);
         } else {
-            ERC20(Currency.unwrap(token)).safeTransferFrom(payer, address(poolManager), amount);
+            PERMIT2.transferFrom(payer, address(poolManager), uint160(amount), Currency.unwrap(token));
         }
     }
 
