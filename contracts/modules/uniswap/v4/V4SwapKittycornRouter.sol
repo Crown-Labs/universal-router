@@ -94,8 +94,9 @@ abstract contract V4SwapKittycornRouter is V4Router, Permit2Payments {
         uint256 amount
     ) internal override returns (bool) {
         if (checkNativeCurrencyIn(currency0, currency1)) {
-            // Wrap native currency
+            // Wrap native currency and settle back to poolManager
             WETH9.deposit{value: amount}();
+            _settle(currency1, address(this), amount);
             return true;
         }
         return false;
@@ -111,7 +112,7 @@ abstract contract V4SwapKittycornRouter is V4Router, Permit2Payments {
             // Take WETH from poolManager, unwrap it, and settle back to poolManager
             _take(currency0, address(this), amount);
             WETH9.withdraw(amount);
-            poolManager.settle{value: amount}();
+            _settle(currency1, address(this), amount);
             return true;
         }
         return false;
