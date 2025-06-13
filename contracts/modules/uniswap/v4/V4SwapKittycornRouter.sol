@@ -7,6 +7,7 @@ import {V4Router} from '@kittycorn/src/v4-periphery/V4Router.sol';
 import {IPoolManager} from '@uniswap/v4-core/src/interfaces/IPoolManager.sol';
 import {Currency} from '@uniswap/v4-core/src/types/Currency.sol';
 import {ERC20} from 'solmate/src/tokens/ERC20.sol';
+import {IWETH9} from 'v4-periphery/src/interfaces/external/IWETH9.sol';
 import {SafeTransferLib} from 'solmate/src/utils/SafeTransferLib.sol';
 import {IKittycornBank} from '@kittycorn/src/interface/IKittycornBank.sol';
 
@@ -18,6 +19,12 @@ abstract contract V4SwapKittycornRouter is V4Router, Permit2Payments {
 
     constructor(address _poolManager, address _bank) V4Router(IPoolManager(_poolManager)) {
         bank = IKittycornBank(_bank);
+    }
+
+    // implementation of abstract function BaseActionsRouter.syncReserveBalance
+    function syncReserveBalance(Currency _currencyIn) public override {
+        // Always sync reserve balance for input currency
+        IKittycornBank(bank).syncReserveBalance(Currency.unwrap(_currencyIn));
     }
 
     // implementation of abstract function DeltaResolver._pay
@@ -78,6 +85,46 @@ abstract contract V4SwapKittycornRouter is V4Router, Permit2Payments {
 
         // Transfer token to receiver
         ERC20(Currency.unwrap(token)).safeTransfer(receiver, amount);
+    }
+
+    // implementation of abstract function BaseActionsRouter.wrapCurrencyIn
+    function wrapCurrencyIn(
+        Currency currency0,
+        Currency currency1,
+        uint256 amount
+    ) internal override returns (bool) {
+        if (checkNativeCurrencyIn(currency0, currency1)) {
+            // Wrap native currency
+            WETH9.deposit{value: amount}();
+            return true;
+        }
+        return false;
+    }
+
+    // implementation of abstract function BaseActionsRouter.unwrapCurrencyOut
+    function unwrapCurrencyOut(
+        Currency currency0,
+        Currency currency1,
+        uint256 amount
+    ) internal override returns (bool) {
+        if (checkNativeCurrencyOut(currency0, currency1)) {
+            // Take WETH from poolManager, unwrap it, and settle back to poolManager
+            _take(currency0, address(this), amount);
+            WETH9.withdraw(amount);
+            poolManager.settle{value: amount}();
+            return true;
+        }
+        return false;
+    }
+
+    // implementation of abstract function BaseActionsRouter.checkNativeCurrencyIn
+    function checkNativeCurrencyIn(Currency currency0, Currency currency1) public view override returns (bool) {
+        return (currency0.isAddressZero() && Currency.unwrap(currency1) == address(WETH9));
+    }
+
+    // implementation of abstract function BaseActionsRouter.checkNativeCurrencyOut
+    function checkNativeCurrencyOut(Currency currency0, Currency currency1) public view override returns (bool) {
+        return (currency1.isAddressZero() && Currency.unwrap(currency0) == address(WETH9));
     }
 
     // implementation of abstract function BaseActionsRouter.checkTokenizeInCurrencyPath
