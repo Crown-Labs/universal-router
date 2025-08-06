@@ -20,12 +20,6 @@ anvil-start:
 anvil-stop:
 	pkill -f anvil
 
-anvil-run: 
-	forge script $(f) --sig 'run' --fork-url http://127.0.0.1:8545 --private-key $(PRIVATE_KEY) --broadcast $(p)
-
-anvil-deploy: 
-	forge script $(f) --sig 'run' --fork-url $(RPC_FORK_URL) --private-key $(PRIVATE_KEY) --broadcast $(p)
-
 anvil-test: 
 	for file in $$(find script -name "*Test.s.sol"); do \
 		echo "\nRunning $$file..."; \
@@ -38,3 +32,9 @@ test:
 	else \
 		forge test --match-path $(f) $(p); \
 	fi
+
+anvil-run: 
+	forge script $(f) --sig 'run' --fork-url http://127.0.0.1:8545 --private-key $(PRIVATE_KEY) --broadcast $(p)
+
+deploy: 
+	forge script $(f) --sig 'run' --fork-url $(RPC_FORK_URL) --private-key $(PRIVATE_KEY) --broadcast $(p)
