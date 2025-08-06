@@ -130,6 +130,8 @@ contract KittycornUniversalRouterTest is RouterPlanner, Script, Test {
         }
 
         {
+            safeApprove(weth, address(permit2), type(uint256).max);
+
             CurrencyPath[] memory path = new CurrencyPath[](6);
             path[0] = currencyPath(CurrencyLibrary.ADDRESS_ZERO);
             path[1] = currencyPath(Currency.wrap(address(weth)), 500);
@@ -138,7 +140,7 @@ contract KittycornUniversalRouterTest is RouterPlanner, Script, Test {
             path[4] = currencyPath(Currency.wrap(address(tAave)), 10000);
             path[5] = currencyPath(Currency.wrap(address(tLink)));
 
-            uint256 amountIn = (2 * baseDecimals(address(tWeth))) / 10000; // 0.0002 weth
+            uint256 amountIn = (2 * baseDecimals(address(weth))) / 10000; // 0.0002 weth
             universalRouterSwapExactInput(path, amountIn, deployer);
         }
 
