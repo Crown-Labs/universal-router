@@ -29,6 +29,8 @@ npm audit
 
 `make test` runs offline upstream and Kittycorn tests, including fuzzed funding/refunds, approval isolation, reentrancy, fee-on-transfer rejection, deadline rollback, and EIP-170 size. Five upstream mainnet fork suites require `FORK_URL` and are excluded from this offline target. They can be run separately with `forge test --isolate` and a mainnet RPC.
 
+The 2026-11-10 follow-up review adds six regression cases: original payer/refund preservation inside sub-plans, rollback of multiple commands, allowed sub-plan failure, direct `ALLOW_REVERT` behavior, funding-token isolation, and Permit2 amount overflow. All 71 offline tests pass, including 256 funding/refund fuzz runs; npm audit reports zero findings. No additional contract change was required by these cases. The Kittycorn contract and compiler-verification source snapshot remain unchanged. This is an integration review, not a formal proof of all upstream commands.
+
 For the integration test with actual Permit2, Kittycorn Tokenize rates, and all three deployed Base Sepolia tokens, build the sibling SDK and SOR repositories, then run SOR's `npm run check:fork` on a local Base Sepolia Anvil fork. It restores its snapshots and never sends public transactions.
 
 ## Deploy on Base Sepolia

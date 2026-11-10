@@ -190,4 +190,79 @@ contract KittycornUniversalRouterTest is Test {
         router.execute(hex'04', inputs, block.timestamp);
         assertEq(token.balanceOf(receiver), 50);
     }
+
+    /// @notice A sub-plan must retain the external payer for Permit2 funding and refunds.
+    function test_SubPlanKeepsOriginalPayer() public {
+        bytes[] memory inputs = new bytes[](1);
+        inputs[0] = abi.encode(hex'41', plan(100, 70, true, false));
+        vm.prank(user);
+        router.execute(hex'21', inputs, block.timestamp);
+        assertEq(token.balanceOf(user), 999_930);
+        assertEq(token.balanceOf(receiver), 70);
+        assertEq(token.balanceOf(address(router)), 0);
+        assertEq(token.allowance(address(router), address(target)), 0);
+    }
+
+    /// @notice Failure of a later command rolls back prior funding, swaps and refunds.
+    function test_MultipleCommandsRollbackAtomically() public {
+        bytes[] memory inputs = new bytes[](2);
+        inputs[0] = plan(100, 70, true, false)[0];
+        inputs[1] = plan(100, 50, true, true)[0];
+        vm.expectRevert('SWAP_FAILED');
+        vm.prank(user);
+        router.execute(hex'4141', inputs, block.timestamp);
+        assertEq(token.balanceOf(user), 1_000_000);
+        assertEq(token.balanceOf(receiver), 0);
+        assertEq(token.balanceOf(address(router)), 0);
+        assertEq(token.allowance(address(router), address(target)), 0);
+    }
+
+    /// @notice An allowed-to-fail sub-plan cannot leave funds or approvals behind.
+    function test_AllowedSubPlanFailureRestoresFunding() public {
+        token.mint(address(router), 77);
+        bytes[] memory nested = new bytes[](2);
+        nested[0] = plan(100, 70, true, false)[0];
+        nested[1] = plan(100, 50, true, true)[0];
+        bytes[] memory inputs = new bytes[](1);
+        inputs[0] = abi.encode(hex'4141', nested);
+        vm.prank(user);
+        router.execute(hex'a1', inputs, block.timestamp);
+        assertEq(token.balanceOf(user), 1_000_000);
+        assertEq(token.balanceOf(receiver), 0);
+        assertEq(token.balanceOf(address(router)), 77);
+        assertEq(token.allowance(address(router), address(target)), 0);
+    }
+
+    /// @notice Like V4_SWAP, a directly dispatched Kittycorn failure cannot be suppressed by its flag.
+    function test_DirectAllowRevertFlagDoesNotSuppressFailure() public {
+        vm.expectRevert('SWAP_FAILED');
+        vm.prank(user);
+        router.execute(hex'c1', plan(100, 70, true, true), block.timestamp);
+        assertEq(token.balanceOf(user), 1_000_000);
+        assertEq(token.allowance(address(router), address(target)), 0);
+    }
+
+    /// @notice Funding one currency cannot authorize spending another currency held by the router.
+    function test_ActionCannotSpendAnotherToken() public {
+        FundingToken other = new FundingToken();
+        other.mint(address(router), 100);
+        bytes[] memory inputs = new bytes[](1);
+        inputs[0] = abi.encode(address(token), 100, true, abi.encode(address(other), 50, receiver, false));
+        vm.expectRevert();
+        vm.prank(user);
+        router.execute(hex'41', inputs, block.timestamp);
+        assertEq(other.balanceOf(address(router)), 100);
+        assertEq(other.balanceOf(receiver), 0);
+        assertEq(token.balanceOf(user), 1_000_000);
+        assertEq(token.allowance(address(router), address(target)), 0);
+    }
+
+    /// @notice Permit2's uint160 amount must reject overflow instead of truncating the funding cap.
+    function test_Permit2FundingOverflowReverts() public {
+        vm.expectRevert();
+        vm.prank(user);
+        router.execute(hex'41', plan(uint256(type(uint160).max) + 1, 1, true, false), block.timestamp);
+        assertEq(token.balanceOf(user), 1_000_000);
+        assertEq(token.allowance(address(router), address(target)), 0);
+    }
 }
