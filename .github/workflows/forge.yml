@@ -20,5 +20,6 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@50d5a8956f2e319df19e6b57539d7e2acb9f8c1e
         with:
           version: v1.4.4
+      - run: npm audit
       - run: make build
       - run: make test

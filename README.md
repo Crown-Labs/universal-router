@@ -1,7 +1,7 @@
 # Kittycorn Universal Router
 
 Fork of [Uniswap Universal Router](https://github.com/Uniswap/universal-router), synchronized through `3be05ae`.
-The Kittycorn integration supports **Base Sepolia only**. Standard upstream contracts and deployment examples are retained separately.
+The Kittycorn integration supports **Base Sepolia only**. Upstream contract implementations and Foundry tests are retained. Old chain deployment scripts and the duplicate Hardhat/mainnet test harness are removed.
 
 ## Architecture
 
@@ -24,6 +24,7 @@ npm ci --ignore-scripts
 git submodule update --init --recursive
 make build
 make test
+npm audit
 ```
 
 `make test` runs offline upstream and Kittycorn tests, including fuzzed funding/refunds, approval isolation, reentrancy, fee-on-transfer rejection, deadline rollback, and EIP-170 size. Five upstream mainnet fork suites require `FORK_URL` and are excluded from this offline target. They can be run separately with `forge test --isolate` and a mainnet RPC.
@@ -65,3 +66,9 @@ Pass that address as `universalRouter` to SOR/SDK, with a Unix `deadline`. Appro
 5. Configure the new router address in the consuming application.
 
 Steps 3 and 4 are independent; both must be complete before an application uses the Permit2 integration. Direct KittycornRouter execution is already supported without deploying this wrapper.
+
+## Maintenance scope
+
+Use Foundry as the only Solidity build/test tool. The old Hardhat integration/gas-snapshot suite is no longer maintained here; it remains available at the upstream revision above. This is a deliberate reduction in historical test coverage, not proof that every upstream command is covered. Keep all Foundry tests and run the sibling SOR Base Sepolia execution matrix for Kittycorn changes. npm installs only the three Solidity source packages required by remappings; it is not a deployment/release tool for this repository.
+
+When syncing upstream, review contract and Foundry-test changes independently from tooling/deployment changes. Do not restore removed chain deployment examples or Hardhat dependencies automatically.

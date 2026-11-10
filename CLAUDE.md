@@ -1,47 +1,9 @@
 # Universal Router
 
-## Overview
+Solidity fork of Uniswap Universal Router with the Kittycorn command extension. Maintained Kittycorn deployment: Base Sepolia only. See README.md for upstream revision, architecture, validation limits, and deployment steps.
 
-Smart contracts for Uniswap's Universal Router - a flexible, modular routing contract that enables complex multi-hop swaps across Uniswap V2, V3, and V4 protocols. Built with Solidity using Hardhat and Foundry.
+Use Node.js 22+ and Foundry 1.4.4. Install Solidity package sources with `npm ci --ignore-scripts`, initialize submodules, then run `make build`, `make test`, and `npm audit`. npm does not publish this private repository. Foundry is the only maintained build/test toolchain.
 
-## Scripts
+Keep upstream contracts and Foundry tests. The old Hardhat integration/gas harness and multi-chain deploy scripts were intentionally removed; do not restore them automatically on upstream sync. Kittycorn end-to-end execution is tested by the sibling smart-order-router repository on a dedicated local Base Sepolia fork.
 
-- `npm run compile` - Compile contracts with Hardhat and Forge
-- `npm run test:hardhat` - Run Hardhat integration tests
-- `npm run test:gas` - Run gas benchmarking tests with snapshots
-- `npm run test:all` - Run all tests (Hardhat + Foundry)
-- `npm run lint` - Format TypeScript and Solidity files
-- `npm run lint:check` - Check formatting without changes
-- `npm run prettier:fix` - Format TypeScript and JSON files
-
-## Dependencies
-
-<!-- AUTO-GENERATED - Updated by /update-claude-md -->
-
-**Production:**
-- **@openzeppelin/contracts** (5.0.2) - Secure smart contract library
-- **@uniswap/v2-core** (1.0.1) - Uniswap V2 protocol core
-- **@uniswap/v3-core** (1.0.0) - Uniswap V3 protocol core
-
-**Development:**
-- **hardhat** (2.22.14) - Ethereum development environment
-- **@nomicfoundation/hardhat-foundry** (1.1.2) - Foundry integration for Hardhat
-- **@uniswap/router-sdk** (^1.3.0) - SDK for routing logic
-- **@uniswap/sdk-core** (^3.0.1) - Core SDK utilities
-- **@uniswap/v2-sdk** (^3.0.1) - V2 SDK for testing
-- **@uniswap/v3-sdk** (^3.8.3) - V3 SDK for testing
-- **ethers** (^5.7.2) - Ethereum library for JavaScript
-- **typechain** (^4.0.0) - TypeScript bindings for contracts
-- **typescript** (^3.7.3) - TypeScript compiler
-
-## Structure
-
-- `contracts/` - Solidity smart contracts
-- `test/` - Test suites (Foundry + Hardhat)
-- `script/` - Deployment scripts
-- `deploy-addresses/` - Deployed contract addresses per network
-- `audit/` - Security audit reports
-
-## Auto-Update Instructions
-
-After changes to files in this directory or subdirectories, run `/update-claude-md` to keep this documentation synchronized with the codebase.
+Deployment lives in script/kittycorn. `make deploy` simulates by default. Public broadcasting requires explicit authorization and a Foundry keystore. Do not read private keys from .env. Preserve unrelated user changes.

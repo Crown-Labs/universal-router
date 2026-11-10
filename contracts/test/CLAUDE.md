@@ -10,14 +10,12 @@ This directory contains Solidity contracts used exclusively for testing the Univ
 - `ReenteringWETH.sol` - WETH mock with reentrancy capabilities for security testing
 - `TestCustomErrors.sol` - Utilities for testing custom error handling
 - `ExampleModule.sol` - Example module implementation for extension testing
-- `ImportsForTypechain.sol` - Import aggregator for TypeChain type generation
 
 ## Purpose
 
 Test contracts enable:
 - **Token Mocking**: Mintable ERC20s for controlled test environments
 - **Security Testing**: Reentrancy attack simulations
-- **Type Generation**: Complete TypeScript bindings via TypeChain
 - **Extension Testing**: Example modules demonstrating router extensibility
 
 ## Auto-Update Instructions
