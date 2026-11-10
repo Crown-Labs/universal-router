@@ -13,10 +13,11 @@ contract DeployCelo is DeployUniversalRouter {
             v3Factory: 0xAfE208a311B21f13EF87E33A90049fC17A7acDEc,
             pairInitCodeHash: 0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f,
             poolInitCodeHash: 0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54,
-            v4PoolManager: address(0),
+            v4PoolManager: 0x288dc841A52FCA2707c6947B3A777c5E56cd87BC,
+            permissionsAdapterFactory: address(0), // ToDo: Add permissions adapter factory
             v3NFTPositionManager: 0x3d79EdAaBC0EaB6F08ED885C05Fc0B014290D95A,
-            v4PositionManager: address(0),
-            kittycornBank: address(0)
+            v4PositionManager: 0xf7965f3981e4D5BC383BfBCb61501763e9068CA9,
+            spokePool: UNSUPPORTED_PROTOCOL
         });
 
         unsupported = 0x5Dc88340E1c5c6366864Ee415d6034cadd1A9897;

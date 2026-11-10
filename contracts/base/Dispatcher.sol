@@ -3,9 +3,10 @@ pragma solidity ^0.8.24;
 
 import {V2SwapRouter} from '../modules/uniswap/v2/V2SwapRouter.sol';
 import {V3SwapRouter} from '../modules/uniswap/v3/V3SwapRouter.sol';
-import {V4SwapKittycornRouter} from '../modules/uniswap/v4/V4SwapKittycornRouter.sol';
+import {V4SwapRouter} from '../modules/uniswap/v4/V4SwapRouter.sol';
 import {BytesLib} from '../modules/uniswap/v3/BytesLib.sol';
 import {Payments} from '../modules/Payments.sol';
+import {Constants} from '../libraries/Constants.sol';
 import {PaymentsImmutables} from '../modules/PaymentsImmutables.sol';
 import {V3ToV4Migrator} from '../modules/V3ToV4Migrator.sol';
 import {Commands} from '../libraries/Commands.sol';
@@ -16,10 +17,19 @@ import {ActionConstants} from '@uniswap/v4-periphery/src/libraries/ActionConstan
 import {CalldataDecoder} from '@uniswap/v4-periphery/src/libraries/CalldataDecoder.sol';
 import {PoolKey} from '@uniswap/v4-core/src/types/PoolKey.sol';
 import {IPoolManager} from '@uniswap/v4-core/src/interfaces/IPoolManager.sol';
+import {ChainedActions} from '../modules/ChainedActions.sol';
 
 /// @title Decodes and Executes Commands
 /// @notice Called by the UniversalRouter contract to efficiently decode and execute a singular command
-abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKittycornRouter, V3ToV4Migrator, Lock {
+abstract contract Dispatcher is
+    Payments,
+    V2SwapRouter,
+    V3SwapRouter,
+    V4SwapRouter,
+    V3ToV4Migrator,
+    Lock,
+    ChainedActions
+{
     using BytesLib for bytes;
     using CalldataDecoder for bytes;
 
@@ -44,7 +54,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKitt
     /// @dev 2 masks are used to enable use of a nested-if statement in execution for efficiency reasons
     /// @return success True on success of the command, false on failure
     /// @return output The outputs or error messages, if any, from the command
-    function dispatch(bytes1 commandType, bytes calldata inputs) internal returns (bool success, bytes memory output) {
+    function dispatch(bytes1 commandType, bytes calldata inputs) internal virtual returns (bool success, bytes memory output) {
         uint256 command = uint8(commandType & Commands.COMMAND_TYPE_MASK);
 
         success = true;
@@ -56,7 +66,7 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKitt
                 // 0x00 <= command < 0x08
                 if (command < Commands.V2_SWAP_EXACT_IN) {
                     if (command == Commands.V3_SWAP_EXACT_IN) {
-                        // equivalent: abi.decode(inputs, (address, uint256, uint256, bytes, bool))
+                        // equivalent: abi.decode(inputs, (address, uint256, uint256, bytes, bool, uint256[]))
                         address recipient;
                         uint256 amountIn;
                         uint256 amountOutMin;
@@ -69,10 +79,11 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKitt
                             payerIsUser := calldataload(add(inputs.offset, 0x80))
                         }
                         bytes calldata path = inputs.toBytes(3);
+                        uint256[] calldata minHopPriceX36 = inputs.toUint256Array(5);
                         address payer = payerIsUser ? msgSender() : address(this);
-                        v3SwapExactInput(map(recipient), amountIn, amountOutMin, path, payer);
+                        v3SwapExactInput(map(recipient), amountIn, amountOutMin, path, payer, minHopPriceX36);
                     } else if (command == Commands.V3_SWAP_EXACT_OUT) {
-                        // equivalent: abi.decode(inputs, (address, uint256, uint256, bytes, bool))
+                        // equivalent: abi.decode(inputs, (address, uint256, uint256, bytes, bool, uint256[]))
                         address recipient;
                         uint256 amountOut;
                         uint256 amountInMax;
@@ -85,8 +96,9 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKitt
                             payerIsUser := calldataload(add(inputs.offset, 0x80))
                         }
                         bytes calldata path = inputs.toBytes(3);
+                        uint256[] calldata minHopPriceX36 = inputs.toUint256Array(5);
                         address payer = payerIsUser ? msgSender() : address(this);
-                        v3SwapExactOutput(map(recipient), amountOut, amountInMax, path, payer);
+                        v3SwapExactOutput(map(recipient), amountOut, amountInMax, path, payer, minHopPriceX36);
                     } else if (command == Commands.PERMIT2_TRANSFER_FROM) {
                         // equivalent: abi.decode(inputs, (address, address, uint160))
                         address token;
@@ -106,14 +118,15 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKitt
                             permitBatch := add(inputs.offset, calldataload(inputs.offset))
                         }
                         bytes calldata data = inputs.toBytes(1);
-                        (success, output) = address(PERMIT2).call(
-                            abi.encodeWithSignature(
-                                'permit(address,((address,uint160,uint48,uint48)[],address,uint256),bytes)',
-                                msgSender(),
-                                permitBatch,
-                                data
-                            )
-                        );
+                        (success, output) = address(PERMIT2)
+                            .call(
+                                abi.encodeWithSignature(
+                                    'permit(address,((address,uint160,uint48,uint48)[],address,uint256),bytes)',
+                                    msgSender(),
+                                    permitBatch,
+                                    data
+                                )
+                            );
                     } else if (command == Commands.SWEEP) {
                         // equivalent:  abi.decode(inputs, (address, address, uint256))
                         address token;
@@ -123,6 +136,14 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKitt
                             token := calldataload(inputs.offset)
                             recipient := calldataload(add(inputs.offset, 0x20))
                             amountMin := calldataload(add(inputs.offset, 0x40))
+                        }
+                        // An adapter unwraps on arrival, so the router only ever holds the underlying.
+                        // Sweeping the adapter would read an always-zero balance and strand the underlying.
+                        // ETH short-circuits: Constants.ETH is address(0), which is never an adapter, so
+                        // the lookup would be both wasted and reliant on the factory returning zero for it.
+                        if (token != Constants.ETH && address(PERMISSIONS_ADAPTER_FACTORY) != address(0)) {
+                            address underlying = PERMISSIONS_ADAPTER_FACTORY.verifiedPermissionsAdapterOf(token);
+                            if (underlying != address(0)) token = underlying;
                         }
                         Payments.sweep(token, map(recipient), amountMin);
                     } else if (command == Commands.TRANSFER) {
@@ -147,14 +168,24 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKitt
                             bips := calldataload(add(inputs.offset, 0x40))
                         }
                         Payments.payPortion(token, map(recipient), bips);
+                    } else if (command == Commands.PAY_PORTION_FULL_PRECISION) {
+                        // equivalent:  abi.decode(inputs, (address, address, uint256))
+                        address token;
+                        address recipient;
+                        uint256 portion;
+                        assembly {
+                            token := calldataload(inputs.offset)
+                            recipient := calldataload(add(inputs.offset, 0x20))
+                            portion := calldataload(add(inputs.offset, 0x40))
+                        }
+                        Payments.payPortionFullPrecision(token, map(recipient), portion);
                     } else {
-                        // placeholder area for command 0x07
                         revert InvalidCommandType(command);
                     }
                 } else {
                     // 0x08 <= command < 0x10
                     if (command == Commands.V2_SWAP_EXACT_IN) {
-                        // equivalent: abi.decode(inputs, (address, uint256, uint256, bytes, bool))
+                        // equivalent: abi.decode(inputs, (address, uint256, uint256, address[], bool, uint256[]))
                         address recipient;
                         uint256 amountIn;
                         uint256 amountOutMin;
@@ -167,10 +198,11 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKitt
                             payerIsUser := calldataload(add(inputs.offset, 0x80))
                         }
                         address[] calldata path = inputs.toAddressArray(3);
+                        uint256[] calldata minHopPriceX36 = inputs.toUint256Array(5);
                         address payer = payerIsUser ? msgSender() : address(this);
-                        v2SwapExactInput(map(recipient), amountIn, amountOutMin, path, payer);
+                        v2SwapExactInput(map(recipient), amountIn, amountOutMin, path, payer, minHopPriceX36);
                     } else if (command == Commands.V2_SWAP_EXACT_OUT) {
-                        // equivalent: abi.decode(inputs, (address, uint256, uint256, bytes, bool))
+                        // equivalent: abi.decode(inputs, (address, uint256, uint256, address[], bool, uint256[]))
                         address recipient;
                         uint256 amountOut;
                         uint256 amountInMax;
@@ -183,8 +215,9 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKitt
                             payerIsUser := calldataload(add(inputs.offset, 0x80))
                         }
                         address[] calldata path = inputs.toAddressArray(3);
+                        uint256[] calldata minHopPriceX36 = inputs.toUint256Array(5);
                         address payer = payerIsUser ? msgSender() : address(this);
-                        v2SwapExactOutput(map(recipient), amountOut, amountInMax, path, payer);
+                        v2SwapExactOutput(map(recipient), amountOut, amountInMax, path, payer, minHopPriceX36);
                     } else if (command == Commands.PERMIT2_PERMIT) {
                         // equivalent: abi.decode(inputs, (IAllowanceTransfer.PermitSingle, bytes))
                         IAllowanceTransfer.PermitSingle calldata permitSingle;
@@ -192,14 +225,15 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKitt
                             permitSingle := inputs.offset
                         }
                         bytes calldata data = inputs.toBytes(6); // PermitSingle takes first 6 slots (0..5)
-                        (success, output) = address(PERMIT2).call(
-                            abi.encodeWithSignature(
-                                'permit(address,((address,uint160,uint48,uint48),address,uint256),bytes)',
-                                msgSender(),
-                                permitSingle,
-                                data
-                            )
-                        );
+                        (success, output) = address(PERMIT2)
+                            .call(
+                                abi.encodeWithSignature(
+                                    'permit(address,((address,uint160,uint48,uint48),address,uint256),bytes)',
+                                    msgSender(),
+                                    permitSingle,
+                                    data
+                                )
+                            );
                     } else if (command == Commands.WRAP_ETH) {
                         // equivalent: abi.decode(inputs, (address, uint256))
                         address recipient;
@@ -262,9 +296,8 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKitt
                         poolKey := inputs.offset
                         sqrtPriceX96 := calldataload(add(inputs.offset, 0xa0))
                     }
-                    (success, output) = address(poolManager).call(
-                        abi.encodeCall(IPoolManager.initialize, (poolKey, sqrtPriceX96))
-                    );
+                    (success, output) =
+                        address(poolManager).call(abi.encodeCall(IPoolManager.initialize, (poolKey, sqrtPriceX96)));
                 } else if (command == Commands.V4_POSITION_MANAGER_CALL) {
                     // should only call modifyLiquidities() to mint
                     _checkV4PositionManagerCall(inputs);
@@ -274,13 +307,20 @@ abstract contract Dispatcher is Payments, V2SwapRouter, V3SwapRouter, V4SwapKitt
                     revert InvalidCommandType(command);
                 }
             }
-        } else {
+        } else if (command < Commands.ACROSS_V4_DEPOSIT_V3) {
             // 0x21 <= command
             if (command == Commands.EXECUTE_SUB_PLAN) {
                 (bytes calldata _commands, bytes[] calldata _inputs) = inputs.decodeCommandsAndInputs();
                 (success, output) = (address(this)).call(abi.encodeCall(Dispatcher.execute, (_commands, _inputs)));
             } else {
                 // placeholder area for commands 0x22-0x3f
+                revert InvalidCommandType(command);
+            }
+        } else {
+            if (command == Commands.ACROSS_V4_DEPOSIT_V3) {
+                _acrossV4DepositV3(inputs);
+            } else {
+                // placeholder area for commands 0x41-0x5f
                 revert InvalidCommandType(command);
             }
         }

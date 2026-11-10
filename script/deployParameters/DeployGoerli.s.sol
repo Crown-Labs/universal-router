@@ -14,9 +14,10 @@ contract DeployGoerli is DeployUniversalRouter {
             pairInitCodeHash: 0x96e8ac4277198ff8b6f785478aa9a39f403cb768dd02cbee326c3e7da348845f,
             poolInitCodeHash: 0xe34f199b19b2b4f47f68442619d555527d244f78a3297ea89325f843f87b8b54,
             v4PoolManager: address(0),
+            permissionsAdapterFactory: address(0), // ToDo: Add permissions adapter factory
             v3NFTPositionManager: address(0),
             v4PositionManager: address(0),
-            kittycornBank: address(0)
+            spokePool: address(0)
         });
 
         unsupported = 0x5302086A3a25d473aAbBd0356eFf8Dd811a4d89B;

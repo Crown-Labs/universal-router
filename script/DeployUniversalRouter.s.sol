@@ -41,9 +41,10 @@ abstract contract DeployUniversalRouter is Script {
             pairInitCodeHash: params.pairInitCodeHash,
             poolInitCodeHash: params.poolInitCodeHash,
             v4PoolManager: mapUnsupported(params.v4PoolManager),
+            permissionsAdapterFactory: params.permissionsAdapterFactory, // skip mapUnsupported: address(0) signals permissioned-pools disabled
             v3NFTPositionManager: mapUnsupported(params.v3NFTPositionManager),
-            v4PositionManager: mapUnsupported(params.v4PositionManager),
-            kittycornBank: mapUnsupported(params.kittycornBank)
+            v4PositionManager: mapUnsupported(params.v4PositionManager), // must be base PositionManager, not PermissionedPositionManager
+            spokePool: mapUnsupported(params.spokePool)
         });
 
         logParams();
@@ -59,6 +60,7 @@ abstract contract DeployUniversalRouter is Script {
         console2.log('v2Factory:', params.v2Factory);
         console2.log('v3Factory:', params.v3Factory);
         console2.log('v4PoolManager:', params.v4PoolManager);
+        console2.log('permissionsAdapterFactory:', params.permissionsAdapterFactory);
         console2.log('v3NFTPositionManager:', params.v3NFTPositionManager);
         console2.log('v4PositionManager:', params.v4PositionManager);
     }

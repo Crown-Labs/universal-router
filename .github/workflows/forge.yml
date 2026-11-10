@@ -1,62 +1,24 @@
-name: Forge Tests
-
+name: Kittycorn Universal Router checks
 on:
-  push:
-    branches:
-      - main
   pull_request:
-
-env:
-  FOUNDRY_PROFILE: ci
-
+  push:
+    branches: [main, feat/kittycorn]
+permissions:
+  contents: read
 jobs:
-  check:
-    strategy:
-      fail-fast: true
-
-    name: Foundry project
+  test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           submodules: recursive
-
-    # Must Insall node modules for forge to reference in remappings
-      - uses: actions/setup-node@v1
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
-          node-version: 18.x
-          registry-url: https://registry.npmjs.org
-
-      - name: Install Yarn
-        run: npm install -g yarn
-
-      - id: yarn-cache
-        run: echo "::set-output name=dir::$(yarn cache dir)"
-
-      - uses: actions/cache@v1
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - uses: foundry-rs/foundry-toolchain@50d5a8956f2e319df19e6b57539d7e2acb9f8c1e
         with:
-          path: ${{ steps.yarn-cache.outputs.dir }}
-          key: yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            yarn-
-      - name: Install dependencies
-        run: yarn install --frozen-lockfile
-    # End of node module support
-
-      - name: Install Foundry
-        uses: foundry-rs/foundry-toolchain@v1
-        with:
-          version: stable
-
-      - name: Run Forge build
-        run: |
-          forge --version
-          forge build --sizes
-        id: build
-
-      - name: Run Forge tests
-        run: |
-          forge test --isolate -vvv
-        id: test
-        env:
-          FORK_URL: https://mainnet.infura.io/v3/${{ secrets.INFURA_API_KEY }}
+          version: v1.4.4
+      - run: make build
+      - run: make test

@@ -1,40 +1,22 @@
-.PHONY: test 
--include .env
-FORK_BLOCK_FLAG = $(if $(RPC_FORK_BLOCK_NUMBER),--fork-block-number $(RPC_FORK_BLOCK_NUMBER),)
+.PHONY: build test deploy deploy-check
+chain ?= base-sepolia
+rpc ?= $(RPC_BASE_SEPOLIA_FORK_URL)
+broadcast ?= false
 
-env:
-	cp example.env .env
+build: ## Compile contracts
+	forge build
 
-clean:
-	forge clean
+test: ## Offline upstream and Kittycorn tests (fork suites require FORK_URL)
+	forge test --no-match-contract '^(SwapProxyTest|V2DaiWeth|V2MockMock|V2MockWeth|V2WethApe)$$' --match-path 'test/foundry-tests/*.t.sol' -vv
 
-compile: 
-	forge compile -vvvvv
-	
-build: 
-	forge compile -vvvvv
+deploy: ## Simulate; add broadcast=true wallet=<keystore> to deploy on Base Sepolia
+	@test "$(chain)" = base-sepolia || { echo 'Only Kittycorn Base Sepolia is supported'; exit 1; }
+	@test -n "$(rpc)" || { echo 'Set RPC_BASE_SEPOLIA_FORK_URL or rpc=<URL>'; exit 1; }
+	@test "$(broadcast)" = false -o "$(broadcast)" = true || { echo 'broadcast must be true or false'; exit 1; }
+	@if [ "$(broadcast)" = true ] && [ -z "$(wallet)" ]; then echo 'Use wallet=<Foundry keystore name> when broadcasting'; exit 1; fi
+	@forge script script/kittycorn/Deploy.s.sol --rpc-url "$(rpc)" $(if $(sender),--sender "$(sender)") $(if $(wallet),--account "$(wallet)") $(if $(filter true,$(broadcast)),--broadcast,)
 
-anvil-start:
-	anvil -m $(MNEMONIC) --fork-url $(RPC_FORK_URL) $(FORK_BLOCK_FLAG)
-
-anvil-stop:
-	pkill -f anvil
-
-anvil-test: 
-	for file in $$(find script -name "*Test.s.sol"); do \
-		echo "\nRunning $$file..."; \
-		forge script $$file --sig 'run' --fork-url http://127.0.0.1:8545 --private-key $(PRIVATE_KEY) --broadcast $(p) || exit 1; \
-	done; \
-
-test: 
-	@if [ -z "$(f)" ]; then \
-		forge test $(p); \
-	else \
-		forge test --match-path $(f) $(p); \
-	fi
-
-anvil-run: 
-	forge script $(f) --sig 'run' --fork-url http://127.0.0.1:8545 --private-key $(PRIVATE_KEY) --broadcast $(p)
-
-deploy: 
-	forge script $(f) --sig 'run' --fork-url $(RPC_FORK_URL) --private-key $(PRIVATE_KEY) --broadcast $(p)
+deploy-check: ## Read-only validation of router=<deployed address>
+	@test "$(chain)" = base-sepolia || { echo 'Only Kittycorn Base Sepolia is supported'; exit 1; }
+	@test -n "$(rpc)" -a -n "$(router)" || { echo 'Set rpc and router=<deployed address>'; exit 1; }
+	@KITTYCORN_UNIVERSAL_ROUTER="$(router)" forge script script/kittycorn/DeployedCheck.s.sol --rpc-url "$(rpc)"

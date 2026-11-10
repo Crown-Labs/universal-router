@@ -15,7 +15,7 @@ import {IERC165} from '@openzeppelin/contracts/utils/introspection/IERC165.sol';
 
 contract UniversalRouterTest is Test {
     address constant RECIPIENT = address(1234);
-    uint256 constant AMOUNT = 10**18;
+    uint256 constant AMOUNT = 10 ** 18;
 
     UniversalRouter router;
     ExampleModule testModule;
@@ -30,9 +30,10 @@ contract UniversalRouterTest is Test {
             pairInitCodeHash: bytes32(0),
             poolInitCodeHash: bytes32(0),
             v4PoolManager: address(0),
+            permissionsAdapterFactory: address(0),
             v3NFTPositionManager: address(0),
             v4PositionManager: address(0),
-            kittycornBank: address(0)
+            spokePool: address(0)
         });
         router = new UniversalRouter(params);
         testModule = new ExampleModule();
@@ -40,6 +41,10 @@ contract UniversalRouterTest is Test {
     }
 
     event ExampleModuleEvent(string message);
+
+    function test_bytecodeSize() public {
+        vm.snapshotValue('UniversalRouter bytecode size', address(router).code.length);
+    }
 
     function testCallModule() public {
         uint256 bytecodeSize;
@@ -96,5 +101,59 @@ contract UniversalRouterTest is Test {
 
         vm.expectRevert(Payments.InsufficientETH.selector);
         router.execute(commands, inputs);
+    }
+
+    function testPayPortionFullPrecisionToken() public {
+        bytes memory commands = abi.encodePacked(bytes1(uint8(Commands.PAY_PORTION_FULL_PRECISION)));
+        bytes[] memory inputs = new bytes[](1);
+        // 50% = 0.5e18
+        inputs[0] = abi.encode(address(erc20), RECIPIENT, 5e17);
+
+        erc20.mint(address(router), AMOUNT);
+        assertEq(erc20.balanceOf(RECIPIENT), 0);
+
+        router.execute(commands, inputs);
+
+        assertEq(erc20.balanceOf(RECIPIENT), AMOUNT / 2);
+    }
+
+    function testPayPortionFullPrecisionETH() public {
+        bytes memory commands = abi.encodePacked(bytes1(uint8(Commands.PAY_PORTION_FULL_PRECISION)));
+        bytes[] memory inputs = new bytes[](1);
+        // 100% = 1e18
+        inputs[0] = abi.encode(Constants.ETH, RECIPIENT, 1e18);
+
+        assertEq(RECIPIENT.balance, 0);
+
+        router.execute{value: AMOUNT}(commands, inputs);
+
+        assertEq(RECIPIENT.balance, AMOUNT);
+    }
+
+    function testPayPortionFullPrecisionInvalidPortion() public {
+        bytes memory commands = abi.encodePacked(bytes1(uint8(Commands.PAY_PORTION_FULL_PRECISION)));
+        bytes[] memory inputs = new bytes[](1);
+        // portion > 1e18 should revert
+        inputs[0] = abi.encode(address(erc20), RECIPIENT, 1e18 + 1);
+
+        erc20.mint(address(router), AMOUNT);
+
+        vm.expectRevert(Payments.InvalidPortion.selector);
+        router.execute(commands, inputs);
+    }
+
+    function testPayPortionFullPrecisionSmallFraction() public {
+        bytes memory commands = abi.encodePacked(bytes1(uint8(Commands.PAY_PORTION_FULL_PRECISION)));
+        bytes[] memory inputs = new bytes[](1);
+        // 0.0001% = 1e12 (precision beyond bips)
+        inputs[0] = abi.encode(address(erc20), RECIPIENT, 1e12);
+
+        erc20.mint(address(router), AMOUNT);
+        assertEq(erc20.balanceOf(RECIPIENT), 0);
+
+        router.execute(commands, inputs);
+
+        // 1e18 * 1e12 / 1e18 = 1e12
+        assertEq(erc20.balanceOf(RECIPIENT), 1e12);
     }
 }

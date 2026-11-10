@@ -1,12 +1,8 @@
 {
-  "name": "@uniswap/universal-router",
+  "name": "@kittycorn-labs/universal-router",
   "description": "Smart contracts for Universal Router",
   "license": "GPL-2.0-or-later",
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
-  "version": "2.0.0",
+  "version": "2.1.0",
   "keywords": [
     "uniswap",
     "router",
@@ -15,7 +11,7 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/Uniswap/universal-router"
+    "url": "https://github.com/Crown-Labs/universal-router"
   },
   "files": [
     "contracts/base",
@@ -29,7 +25,7 @@
     "!artifacts/contracts/base/**/*"
   ],
   "engines": {
-    "node": ">=14"
+    "node": ">=22"
   },
   "dependencies": {
     "@openzeppelin/contracts": "5.0.2",
@@ -63,11 +59,12 @@
   },
   "scripts": {
     "compile": "hardhat compile && forge build",
-    "test:hardhat": "yarn compile && hardhat test",
-    "test:gas": "UPDATE_SNAPSHOT=1 yarn test --grep gas",
-    "test:all": "UPDATE_SNAPSHOT=1 yarn test:hardhat && forge test --isolate",
+    "test:hardhat": "npm run compile && hardhat test",
+    "test:gas": "UPDATE_SNAPSHOT=1 npm run test:hardhat --grep gas",
+    "test:all": "UPDATE_SNAPSHOT=1 npm run test:hardhat && forge test --isolate",
     "prettier:fix": "prettier --write '**/*.ts' && prettier --write '**/*.json'",
-    "lint": "yarn prettier:fix && forge fmt",
+    "lint": "npm run prettier:fix && forge fmt",
     "lint:check": "prettier --check '**/*.ts' && forge fmt --check"
-  }
+  },
+  "private": true
 }
