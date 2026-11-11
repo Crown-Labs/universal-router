@@ -7,20 +7,8 @@ import {RouterParameters} from 'contracts/types/RouterParameters.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {ERC20} from '@openzeppelin/contracts/token/ERC20/ERC20.sol';
 import {WETH} from 'solmate/src/tokens/WETH.sol';
-
-contract Permit2Mock {
-    mapping(address => mapping(address => uint160)) public allowance;
-
-    function approve(address, address spender, uint160 amount, uint48) external {
-        allowance[msg.sender][spender] = amount;
-    }
-
-    function transferFrom(address from, address to, uint160 amount, address token) external {
-        require(allowance[from][msg.sender] >= amount, 'PERMIT2_ALLOWANCE');
-        allowance[from][msg.sender] -= amount;
-        IERC20(token).transferFrom(from, to, amount);
-    }
-}
+import {DeployPermit2} from 'permit2/test/utils/DeployPermit2.sol';
+import {IAllowanceTransfer} from 'permit2/src/interfaces/IAllowanceTransfer.sol';
 
 contract FundingToken is ERC20 {
     bool public fee;
@@ -49,6 +37,13 @@ contract ActionRouterMock {
     address public constant WETH9 = address(0x5678);
     address public immutable bank;
     bool public reenter;
+    IERC20 public outputToken;
+    uint256 public outputAmount;
+
+    function setOutput(IERC20 token, uint256 amount) external {
+        outputToken = token;
+        outputAmount = amount;
+    }
 
     function setReenter() external {
         reenter = true;
@@ -68,6 +63,7 @@ contract ActionRouterMock {
             require(!success, 'REENTRY_SUCCEEDED');
         }
         IERC20(token).transferFrom(msg.sender, receiver, spend);
+        if (outputAmount != 0) outputToken.transfer(msg.sender, outputAmount);
     }
 }
 
@@ -75,13 +71,13 @@ contract KittycornUniversalRouterTest is Test {
     KittycornUniversalRouter router;
     ActionRouterMock target;
     FundingToken token;
-    Permit2Mock permit2;
+    IAllowanceTransfer permit2;
     address user = address(0xa11ce);
     address receiver = address(0xb0b);
 
     function setUp() public {
         token = new FundingToken();
-        permit2 = new Permit2Mock();
+        permit2 = IAllowanceTransfer(new DeployPermit2().deployPermit2());
         target = new ActionRouterMock();
         RouterParameters memory params;
         params.permit2 = address(permit2);
@@ -307,5 +303,91 @@ contract KittycornUniversalRouterTest is Test {
         assertEq(weth.balanceOf(address(router)), 0);
         assertEq(address(router).balance, 0);
         assertEq(weth.allowance(address(router), address(target)), 0);
+    }
+
+    /// @notice Real Permit2 verifies a signed permit, consumes its nonce and refunds exact-output excess.
+    function test_SignedPermitAndSwapRejectReplay() public {
+        uint256 key = 0x12345;
+        address payer = vm.addr(key);
+        token.mint(payer, 1000);
+        vm.prank(payer);
+        token.approve(address(permit2), type(uint256).max);
+        IAllowanceTransfer.PermitSingle memory permit = IAllowanceTransfer.PermitSingle({
+            details: IAllowanceTransfer.PermitDetails(address(token), 100, uint48(block.timestamp + 600), 0),
+            spender: address(router),
+            sigDeadline: block.timestamp + 600
+        });
+        bytes32 detailsHash = keccak256(
+            abi.encode(
+                keccak256('PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)'), permit.details
+            )
+        );
+        bytes32 permitHash = keccak256(
+            abi.encode(
+                keccak256(
+                    'PermitSingle(PermitDetails details,address spender,uint256 sigDeadline)PermitDetails(address token,uint160 amount,uint48 expiration,uint48 nonce)'
+                ),
+                detailsHash,
+                permit.spender,
+                permit.sigDeadline
+            )
+        );
+        (uint8 v, bytes32 r, bytes32 s) =
+            vm.sign(key, keccak256(abi.encodePacked('\x19\x01', permit2.DOMAIN_SEPARATOR(), permitHash)));
+        bytes[] memory inputs = new bytes[](2);
+        inputs[0] = abi.encode(permit, abi.encodePacked(r, s, v));
+        inputs[1] = plan(100, 70, true, false)[0];
+        vm.prank(payer);
+        router.execute(hex'0a41', inputs, block.timestamp);
+        assertEq(token.balanceOf(payer), 930);
+        assertEq(token.balanceOf(receiver), 70);
+        assertEq(token.balanceOf(address(router)), 0);
+        assertEq(token.allowance(address(router), address(target)), 0);
+        (uint160 remaining,, uint48 nonce) = permit2.allowance(payer, address(token), address(router));
+        assertEq(remaining, 0);
+        assertEq(nonce, 1);
+        vm.expectRevert();
+        vm.prank(payer);
+        router.execute(hex'0a41', inputs, block.timestamp);
+        assertEq(token.balanceOf(payer), 930);
+    }
+
+    /// @notice Expired or insufficient real Permit2 approvals cannot fund a command.
+    function test_Permit2ApprovalLimitsRollback() public {
+        vm.prank(user);
+        permit2.approve(address(token), address(router), 99, uint48(block.timestamp + 10));
+        vm.expectRevert();
+        vm.prank(user);
+        router.execute(hex'41', plan(100, 70, true, false), block.timestamp);
+        vm.warp(block.timestamp + 11);
+        vm.expectRevert();
+        vm.prank(user);
+        router.execute(hex'41', plan(99, 70, true, false), block.timestamp);
+        assertEq(token.balanceOf(user), 1_000_000);
+        assertEq(token.balanceOf(receiver), 0);
+    }
+
+    /// @notice ERC20 input refunds go to the payer while native output goes to a separate recipient.
+    function testFuzz_NativeOutputAndMinimum(uint96 output, bool failMinimum) public {
+        output = uint96(bound(output, 1, 1 ether));
+        vm.etch(target.WETH9(), address(new WETH()).code);
+        WETH weth = WETH(payable(target.WETH9()));
+        vm.deal(address(this), output);
+        weth.deposit{value: output}();
+        weth.transfer(address(target), output);
+        target.setOutput(IERC20(address(weth)), output);
+        bytes[] memory inputs = new bytes[](2);
+        inputs[0] = plan(100, 70, true, false)[0];
+        inputs[1] = abi.encode(receiver, uint256(output) + (failMinimum ? 1 : 0));
+        if (failMinimum) vm.expectRevert();
+        vm.prank(user);
+        router.execute(hex'410c', inputs, block.timestamp);
+        assertEq(token.balanceOf(user), failMinimum ? 1_000_000 : 999_930);
+        assertEq(token.balanceOf(receiver), failMinimum ? 0 : 70);
+        assertEq(receiver.balance, failMinimum ? 0 : output);
+        assertEq(weth.balanceOf(address(target)), failMinimum ? output : 0);
+        assertEq(weth.balanceOf(address(router)), 0);
+        assertEq(address(router).balance, 0);
+        assertEq(token.allowance(address(router), address(target)), 0);
     }
 }
