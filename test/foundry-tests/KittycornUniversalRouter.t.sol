@@ -6,6 +6,7 @@ import {KittycornUniversalRouter} from 'contracts/KittycornUniversalRouter.sol';
 import {RouterParameters} from 'contracts/types/RouterParameters.sol';
 import {IERC20} from '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import {ERC20} from '@openzeppelin/contracts/token/ERC20/ERC20.sol';
+import {WETH} from 'solmate/src/tokens/WETH.sol';
 
 contract Permit2Mock {
     mapping(address => mapping(address => uint160)) public allowance;
@@ -264,5 +265,47 @@ contract KittycornUniversalRouterTest is Test {
         router.execute(hex'41', plan(uint256(type(uint160).max) + 1, 1, true, false), block.timestamp);
         assertEq(token.balanceOf(user), 1_000_000);
         assertEq(token.allowance(address(router), address(target)), 0);
+    }
+
+    /// @notice Native funding never needs Permit2 and refunds unused ETH to the payer, not the token recipient.
+    function testFuzz_NativeFundingRefundsPayer(uint96 spend, uint96 extra) public {
+        spend = uint96(bound(spend, 1, 500_000));
+        extra = uint96(bound(extra, 0, 500_000));
+        vm.etch(target.WETH9(), address(new WETH()).code);
+        WETH weth = WETH(payable(target.WETH9()));
+        vm.deal(user, 1_000_000);
+        uint256 maximum = uint256(spend) + extra;
+        bytes[] memory inputs = new bytes[](3);
+        inputs[0] = abi.encode(address(router), maximum);
+        inputs[1] = abi.encode(address(weth), maximum, false, abi.encode(address(weth), spend, receiver, false));
+        inputs[2] = abi.encode(address(1), uint256(0));
+        vm.prank(user);
+        router.execute{value: maximum}(hex'0b410c', inputs, block.timestamp);
+        assertEq(user.balance, 1_000_000 - spend);
+        assertEq(weth.balanceOf(receiver), spend);
+        assertEq(receiver.balance, 0);
+        assertEq(weth.balanceOf(address(router)), 0);
+        assertEq(address(router).balance, 0);
+        assertEq(weth.allowance(address(router), address(target)), 0);
+    }
+
+    /// @notice Failure of the final native minimum rolls back wrapping, spending and allowances atomically.
+    function test_NativeUnwrapMinimumFailureRollsBack() public {
+        vm.etch(target.WETH9(), address(new WETH()).code);
+        WETH weth = WETH(payable(target.WETH9()));
+        vm.deal(user, 1_000_000);
+        bytes[] memory inputs = new bytes[](3);
+        inputs[0] = abi.encode(address(router), uint256(100));
+        inputs[1] =
+            abi.encode(address(weth), uint256(100), false, abi.encode(address(weth), uint256(70), receiver, false));
+        inputs[2] = abi.encode(address(1), uint256(31));
+        vm.expectRevert();
+        vm.prank(user);
+        router.execute{value: 100}(hex'0b410c', inputs, block.timestamp);
+        assertEq(user.balance, 1_000_000);
+        assertEq(weth.balanceOf(receiver), 0);
+        assertEq(weth.balanceOf(address(router)), 0);
+        assertEq(address(router).balance, 0);
+        assertEq(weth.allowance(address(router), address(target)), 0);
     }
 }

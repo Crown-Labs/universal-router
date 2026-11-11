@@ -31,13 +31,15 @@ npm audit
 
 The 2026-11-10 follow-up review adds six regression cases: original payer/refund preservation inside sub-plans, rollback of multiple commands, allowed sub-plan failure, direct `ALLOW_REVERT` behavior, funding-token isolation, and Permit2 amount overflow. All 71 offline tests pass, including 256 funding/refund fuzz runs; npm audit reports zero findings. No additional contract change was required by these cases. The Kittycorn contract and compiler-verification source snapshot remain unchanged. This is an integration review, not a formal proof of all upstream commands.
 
+The 2026-11-11 native-ETH review adds native funding/refund fuzzing and rollback on a failing final unwrap minimum. All 73 offline tests pass, with 256 runs for each of the ERC20 and native funding fuzz tests. The sibling SOR executed eight native exact-input/output cases against the existing deployed router on a Base Sepolia fork, including distinct payer/recipient and exact-output refunds. The SDK composes WRAP_ETH / KITTYCORN_SWAP / UNWRAP_WETH; no production contract change or redeployment is needed. Source and creation/runtime hashes still match the compiler evidence below.
+
 For the integration test with actual Permit2, Kittycorn Tokenize rates, and all three deployed Base Sepolia tokens, build the sibling SDK and SOR repositories, then run SOR's `npm run check:fork` on a local Base Sepolia Anvil fork. It restores its snapshots and never sends public transactions.
 
 ## Deploy on Base Sepolia
 
 This deploys **only a new KittycornUniversalRouter**. Existing Bank, KittycornRouter, Tokenize contracts, Permit2, and pools are reused. There is no npm package to publish from this repository (`private: true`).
 
-Set `RPC_BASE_SEPOLIA_FORK_URL` in your shell. Use a Foundry keystore named `deployer` for broadcasting; no script reads `.env` or `PRIVATE_KEY`.
+Make loads this repository's `.env` automatically. Set `RPC_BASE_SEPOLIA_FORK_URL` there (see `example.env`), or in your shell. An explicit `rpc=<URL>` overrides it. No `export` command is needed when using `.env`. Use a Foundry keystore named `deployer` for broadcasting; signing still uses `wallet=<name>` rather than `PRIVATE_KEY`.
 
 Simulate first:
 
